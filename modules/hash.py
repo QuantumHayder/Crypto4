@@ -4,6 +4,10 @@ import hashlib
 # hash_object = hashlib.sha256(text.encode())
 # hash_digest = hash_object.hexdigest()
 # print("SHA Hash of ", text, " is ", hash_digest)
+def hash_password(password: str):
+    hash_object = hashlib.sha256(password.encode())
+    hash_digest = hash_object.hexdigest()
+    return hash_digest
 
 def hash_file(file_path):
     h = hashlib.new('sha256')
