@@ -15,6 +15,9 @@ def hash_file(file_path):
             h.update(chunk)
     return h.hexdigest()
 
+def hash_string(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
 def verify_integrity(file1, file2):
     hash1 = hash_file(file1)
     hash2 = hash_file(file2)

@@ -1,7 +1,7 @@
 from modules.hash import hash_file, verify_integrity
 from modules.encryption import aes_ed, rsa_ed
 from modules.password import check_strength, hash_pw, verify_pw
-from modules.elgamal import describe_keypair, generate_keypair, load_keypair, save_keypair, export_public_key, load_public_key_only
+from modules.elgamal import generate_keypair, load_keypair, save_keypair, export_public_key, load_public_key_only
 from getpass import getpass
 def menu():
     print("\nSelect operation: ")
@@ -70,15 +70,20 @@ while True:
         action = input("Type 'g' to generate, 'l' to load, 'e' to export public key: ").strip().lower()
         
         if action == "g":
-            public_key, private_key = generate_keypair(username)
-            saved_path = save_keypair(public_key, private_key, username=username)
-            print(f"✓ ElGamal keypair saved to {saved_path}")
-            print(describe_keypair(public_key))
+            try:
+                public_key, private_key = generate_keypair(username)
+                saved_path = save_keypair(public_key, private_key, username=username)
+                print(f"✓ ElGamal keypair saved to {saved_path}")
+                print(f"Public Key (y): {public_key.y}")
+                print(f"Private Key (x): {private_key.x}")
+            except ValueError as e:
+                print(f"✗ Error: {e}")
             
         elif action == "l":
             try:
-                public_key, _ = load_keypair(username=username)
-                print(describe_keypair(public_key))
+                public_key, private_key = load_keypair(username=username)
+                print(f"✓ Keys loaded for {username}")
+                print(f"Public Key (y): {public_key.y}")
             except FileNotFoundError:
                 print(f"✗ No keypair found for user '{username}'")
                 
