@@ -2,3 +2,4 @@ bcrypt
 cryptography
 pycryptodomex
 zxcvbn
+requests
