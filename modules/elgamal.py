@@ -5,24 +5,40 @@ from pathlib import Path
 
 from modules.config import ELGAMAL_PARAMS
 
-DEFAULT_KEYS_DIR = Path("keys")
+DEFAULT_KEYS_DIR = Path("vaults")
 
 
-def _user_key_path(username: str) -> Path:
-	"""Get the full key file path for a user."""
-	return DEFAULT_KEYS_DIR / f"{username}_key.json"
+def _user_private_key_path(username: str) -> Path:
+	"""
+	get the full key file path for a user
+	
+	args:
+		username
+
+	returns:
+		Path: path to user's private key (json)
+	"""
+	return DEFAULT_KEYS_DIR / f"{username}" / "keys" / f"{username}_private.json"
 
 
 def _user_public_key_path(username: str) -> Path:
-	"""Get the public key export file path for a user."""
-	return DEFAULT_KEYS_DIR / f"{username}_public.json"
+	"""
+	get the public key export file path for a user
+	
+	args:
+		username
+
+	returns:
+		Path: path to user's public key (json)
+	"""
+	return DEFAULT_KEYS_DIR / f"{username}" / "keys" / f"{username}_public.json"
 
 
 @dataclass(frozen=True)
 class ElGamalPublicKey:
-	p: int
-	g: int
-	y: int
+	p: 		int
+	alpha: 	int
+	y: 		int
 
 
 @dataclass(frozen=True)
@@ -32,100 +48,95 @@ class ElGamalPrivateKey:
 
 def generate_keypair(username: str):
 	"""
-	Generate an ElGamal keypair using shared parameters from config.
+	generate an elgamal keypair using shared parameters from config
 	
-	Raises an error if keys already exist for this user to prevent accidental overwrite.
-	
-	Args:
-	    username: Username (required) to associate with this keypair.
-	
-	Returns:
-	    (ElGamalPublicKey, ElGamalPrivateKey): The public and private key pair.
-	    
-	Raises:
-	    ValueError: If username is invalid or keys already exist for this user.
+	returns:
+		(ElGamalPublicKey, ElGamalPrivateKey)
+
+	raises:
+		ValueError: if username is invalid or keys already exist for this user
 	"""
 	if not username or not isinstance(username, str):
 		raise ValueError("username must be a non-empty string")
 	
-	key_path = _user_key_path(username)
+	key_path = _user_private_key_path(username)
 	if key_path.exists():
-		raise ValueError(f"Keys already exist for user '{username}'. Use load_keypair() to load them, or delete the file and try again.")
+		raise ValueError(f"Keys already exist for user '{username}'. Use load_keypair() to load them.")
 	
-	p = ELGAMAL_PARAMS["p"]
-	g = ELGAMAL_PARAMS["g"]
-	q = (p - 1) // 2 
+	p 	  = ELGAMAL_PARAMS["p"]
+	alpha = ELGAMAL_PARAMS["alpha"]
 	
-	x = secrets.randbelow(q - 2) + 2
+	x = secrets.randbelow(p - 3) + 2   # [2, p-2]
 	
-	# y = g^x mod p
-	y = pow(g, x, p)
+	# y = alpha^x mod p
+	y = pow(alpha, x, p)
 	
-	return ElGamalPublicKey(p=p, g=g, y=y), ElGamalPrivateKey(x=x)
+	return ElGamalPublicKey(p=p, alpha=alpha, y=y), ElGamalPrivateKey(x=x)
 
 
 def validate_keypair(public_key: ElGamalPublicKey, private_key: ElGamalPrivateKey) -> None:
 	"""
-	Validate that a keypair is mathematically consistent.
-	
-	Raises:
-	    ValueError: If any validation check fails.
+	validate that a keypair is mathematically consistent
+
+	raises:
+	    ValueError: if any validation check fails.
 	"""
 	if public_key.p <= 2:
 		raise ValueError("Invalid prime modulus")
-	if public_key.g <= 1 or public_key.g >= public_key.p:
-		raise ValueError("Invalid generator")
+	
+	if public_key.alpha <= 1 or public_key.alpha >= public_key.p:
+		raise ValueError("Invalid primitive root")
+	
 	if public_key.y <= 1 or public_key.y >= public_key.p:
 		raise ValueError("Invalid public key value")
+	
 	if private_key.x <= 1 or private_key.x >= public_key.p - 1:
 		raise ValueError("Invalid private key value")
-	if pow(public_key.g, private_key.x, public_key.p) != public_key.y:
+	
+	if pow(public_key.alpha, private_key.x, public_key.p) != public_key.y:
 		raise ValueError("Public and private key values do not match")
 
 
 def save_keypair(
 	public_key: ElGamalPublicKey,
 	private_key: ElGamalPrivateKey,
-	username: str,
-	file_path: str | Path = None,
-) -> Path:
+	username: str
+) -> tuple[Path, Path]:
 	"""
-	Save keypair to JSON file (both public and private).
-	
-	Args:
-	    public_key: The ElGamal public key.
-	    private_key: The ElGamal private key.
-	    username: Username (required) to save keypair for.
-	    file_path: Custom file path (optional, overrides username-based path).
-	    
-	Returns:
-	    Path: The path where the keypair was saved.
+	save keypair to JSON file
+
+	returns:
+		tuple[Path, Path]: paths where (private_key, public_key) were saved.
 	"""
 	if not username or not isinstance(username, str):
 		raise ValueError("username must be a non-empty string")
 	
 	validate_keypair(public_key, private_key)
-	
-	if file_path is None:
-		path = _user_key_path(username)
-	else:
-		path = Path(file_path)
-	
-	path.parent.mkdir(parents=True, exist_ok=True)
 
-	payload = {
-		"public": {
-			"p": str(public_key.p),
-			"g": str(public_key.g),
-			"y": str(public_key.y),
-		},
+	private_path = _user_private_key_path(username)
+	public_path  = _user_public_key_path(username)
+	
+	private_path.parent.mkdir(parents=True, exist_ok=True)
+	public_path.parent.mkdir(parents=True, exist_ok=True)
+
+	private_payload = {
 		"private": {
 			"x": str(private_key.x),
-		},
+		}
 	}
 
-	path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-	return path
+	public_payload = {
+		"public": {
+			"p":     str(public_key.p),
+			"alpha": str(public_key.alpha),
+			"y":     str(public_key.y),
+		}
+	}
+
+	private_path.write_text(json.dumps(private_payload, indent=2), encoding="utf-8")
+	public_path.write_text(json.dumps(public_payload,  indent=2), encoding="utf-8")
+	
+	return private_path, public_path
 
 
 def _require_int_field(section: dict, name: str) -> int:
@@ -158,7 +169,7 @@ def load_keypair(username: str, file_path: str | Path = None):
 		raise ValueError("username must be a non-empty string")
 	
 	if file_path is None:
-		path = _user_key_path(username)
+		path = _user_private_key_path(username)
 	else:
 		path = Path(file_path)
 	
@@ -171,7 +182,7 @@ def load_keypair(username: str, file_path: str | Path = None):
 
 	public_key = ElGamalPublicKey(
 		p=_require_int_field(public_section, "p"),
-		g=_require_int_field(public_section, "g"),
+		alpha=_require_int_field(public_section, "alpha"),
 		y=_require_int_field(public_section, "y"),
 	)
 	private_key = ElGamalPrivateKey(x=_require_int_field(private_section, "x"))
@@ -205,7 +216,7 @@ def export_public_key(username: str, output_path: str | Path = None) -> Path:
 	payload = {
 		"public": {
 			"p": str(public_key.p),
-			"g": str(public_key.g),
+			"alpha": str(public_key.alpha),
 			"y": str(public_key.y),
 		}
 	}
@@ -245,6 +256,6 @@ def load_public_key_only(username: str = None, file_path: str | Path = None) -> 
 	
 	return ElGamalPublicKey(
 		p=_require_int_field(public_section, "p"),
-		g=_require_int_field(public_section, "g"),
+		alpha=_require_int_field(public_section, "alpha"),
 		y=_require_int_field(public_section, "y"),
 	)
