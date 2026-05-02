@@ -9,29 +9,19 @@ DEFAULT_KEYS_DIR = Path("vaults")
 
 
 def _user_private_key_path(username: str) -> Path:
-	"""
-	get the full key file path for a user
-	
-	args:
-		username
-
-	returns:
-		Path: path to user's private key (json)
-	"""
 	return DEFAULT_KEYS_DIR / f"{username}" / "keys" / f"{username}_private.json"
 
-
 def _user_public_key_path(username: str) -> Path:
-	"""
-	get the public key export file path for a user
-	
-	args:
-		username
-
-	returns:
-		Path: path to user's public key (json)
-	"""
 	return DEFAULT_KEYS_DIR / f"{username}" / "keys" / f"{username}_public.json"
+
+def _require_int_field(section: dict, name: str) -> int:
+    value = section.get(name)
+    if value is None:
+        raise ValueError(f"Missing field: {name}")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid integer field: {name}") from exc
 
 
 @dataclass(frozen=True)
@@ -79,7 +69,7 @@ def validate_keypair(public_key: ElGamalPublicKey, private_key: ElGamalPrivateKe
 	validate that a keypair is mathematically consistent
 
 	raises:
-	    ValueError: if any validation check fails.
+		ValueError: if any validation check fails.
 	"""
 	if public_key.p <= 2:
 		raise ValueError("Invalid prime modulus")
@@ -139,123 +129,61 @@ def save_keypair(
 	return private_path, public_path
 
 
-def _require_int_field(section: dict, name: str) -> int:
-	"""Extract an integer field from JSON section with validation."""
-	value = section.get(name)
-	if value is None:
-		raise ValueError(f"Missing field: {name}")
-	try:
-		return int(value)
-	except (TypeError, ValueError) as exc:
-		raise ValueError(f"Invalid integer field: {name}") from exc
-
-
-def load_keypair(username: str, file_path: str | Path = None):
+def load_keypair(username: str):
 	"""
-	Load keypair from JSON file and validate it.
-	
-	Args:
-	    username: Username (required) to load keys for.
-	    file_path: Custom file path (optional, overrides username-based path).
-	    
-	Returns:
-	    (ElGamalPublicKey, ElGamalPrivateKey): The loaded keypair.
-	    
-	Raises:
-	    FileNotFoundError: If the key file does not exist.
-	    ValueError: If the key file is invalid or keys don't match.
+	load keypair from JSON file and validate it
+
+	returns:
+		(ElGamalPublicKey, ElGamalPrivateKey): The loaded keypair
+
+	raises:
+		FileNotFoundError
+		ValueError: If the key file is invalid or keys don't match
 	"""
 	if not username or not isinstance(username, str):
 		raise ValueError("username must be a non-empty string")
 	
-	if file_path is None:
-		path = _user_private_key_path(username)
-	else:
-		path = Path(file_path)
-	
-	data = json.loads(path.read_text(encoding="utf-8"))
+	private_data = json.loads(_user_private_key_path(username).read_text(encoding="utf-8"))
+	public_data  = json.loads(_user_public_key_path(username).read_text(encoding="utf-8"))
 
-	public_section = data.get("public")
-	private_section = data.get("private")
-	if not isinstance(public_section, dict) or not isinstance(private_section, dict):
+	private_section = private_data.get("private")
+	public_section  = public_data.get("public")
+
+	if not isinstance(private_section, dict) or not isinstance(public_section, dict):
 		raise ValueError("Invalid key file structure")
 
-	public_key = ElGamalPublicKey(
-		p=_require_int_field(public_section, "p"),
-		alpha=_require_int_field(public_section, "alpha"),
-		y=_require_int_field(public_section, "y"),
+	public_key  = ElGamalPublicKey(
+		p     = _require_int_field(public_section, "p"),
+		alpha = _require_int_field(public_section, "alpha"),
+		y     = _require_int_field(public_section, "y"),
 	)
 	private_key = ElGamalPrivateKey(x=_require_int_field(private_section, "x"))
+
 	validate_keypair(public_key, private_key)
 	return public_key, private_key
 
 
-def export_public_key(username: str, output_path: str | Path = None) -> Path:
+def load_public_key_only(username: str = None) -> ElGamalPublicKey:
 	"""
-	Export only the public key for sharing with other users.
-	
-	Args:
-	    username: Username whose public key to export.
-	    output_path: Where to save the public key (default: keys/{username}_public.json).
-	    
-	Returns:
-	    Path: The path where the public key was saved.
-	    
-	Raises:
-	    FileNotFoundError: If the user's keypair does not exist.
-	"""
-	public_key, _ = load_keypair(username=username)
-	
-	if output_path is None:
-		path = _user_public_key_path(username)
-	else:
-		path = Path(output_path)
-	
-	path.parent.mkdir(parents=True, exist_ok=True)
-	
-	payload = {
-		"public": {
-			"p": str(public_key.p),
-			"alpha": str(public_key.alpha),
-			"y": str(public_key.y),
-		}
-	}
-	
-	path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-	return path
+	load only the public key from a file
 
-
-def load_public_key_only(username: str = None, file_path: str | Path = None) -> ElGamalPublicKey:
+	raises:
+		FileNotFoundError
+		ValueError: If username is not provided.
 	"""
-	Load only the public key from a file (for verification by others).
+	if username is None:
+		raise ValueError("username must be provided")
 	
-	Args:
-	    username: Username whose public key to load (uses default path if file_path not provided).
-	    file_path: Custom file path to public key file (if provided, username is ignored).
-	    
-	Returns:
-	    ElGamalPublicKey: The public key.
-	    
-	Raises:
-	    FileNotFoundError: If the public key file does not exist.
-	    ValueError: If neither username nor file_path is provided.
-	"""
-	if file_path is None and username is None:
-		raise ValueError("Either username or file_path must be provided")
-	
-	if file_path is None:
-		path = _user_public_key_path(username)
-	else:
-		path = Path(file_path)
+	path = _user_public_key_path(username)
 	
 	data = json.loads(path.read_text(encoding="utf-8"))
 	public_section = data.get("public")
-	
+
 	if not isinstance(public_section, dict):
 		raise ValueError("Invalid public key file structure")
 	
 	return ElGamalPublicKey(
-		p=_require_int_field(public_section, "p"),
-		alpha=_require_int_field(public_section, "alpha"),
-		y=_require_int_field(public_section, "y"),
+		p	  =_require_int_field(public_section, "p"),
+		alpha =_require_int_field(public_section, "alpha"),
+		y	  =_require_int_field(public_section, "y"),
 	)

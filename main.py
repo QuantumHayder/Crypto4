@@ -1,7 +1,7 @@
 from modules.hash import hash_file, verify_integrity
 from modules.encryption import aes_ed, rsa_ed
 from modules.password import check_strength, hash_pw, verify_pw
-from modules.elgamal import generate_keypair, load_keypair, save_keypair, export_public_key, load_public_key_only
+from modules.elgamal import generate_keypair, load_keypair, save_keypair, load_public_key_only
 from getpass import getpass
 def menu():
     print("\nSelect operation: ")
@@ -89,7 +89,7 @@ while True:
                 
         elif action == "e":
             try:
-                export_path = export_public_key(username)
+                export_path = load_public_key_only(username)
                 print(f"✓ Public key exported to {export_path}")
             except FileNotFoundError:
                 print(f"✗ No keypair found for user '{username}'")
