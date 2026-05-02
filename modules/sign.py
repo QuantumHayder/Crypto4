@@ -67,7 +67,7 @@ if __name__ == "__main__":
     sample_vault = {"encrypted_vault": "a3f8b2c1d4e5_sample_encrypted_data", "signature": {}}
     Path("test_vault.json").write_text(json.dumps(sample_vault, indent=2))
 
-    pub  = ElGamalPublicKey(p=23, g=5, y=17)
+    pub  = ElGamalPublicKey(p=23, alpha=5, y=17)
     priv = ElGamalPrivateKey(x=7)
 
     vault = sign_vault("test_vault.json", pub, priv)
