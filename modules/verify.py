@@ -13,7 +13,7 @@ def _computeHash(vault_path: str | Path, public_key) -> bool:
     s = int(signature["s"], 16)
 
     p = public_key.p
-    g = public_key.g
+    alpha = public_key.alpha
     y = public_key.y
     p_minus_1 = p - 1
 
@@ -22,7 +22,7 @@ def _computeHash(vault_path: str | Path, public_key) -> bool:
 
     H = int(hash_string(encrypted_vault), 16) % p_minus_1
 
-    lhs = pow(g, H, p)                       
+    lhs = pow(alpha, H, p)                       
     rhs = (pow(y, r, p) * pow(r, s, p)) % p
 
     return lhs == rhs
