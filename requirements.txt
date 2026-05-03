@@ -3,3 +3,5 @@ cryptography
 pycryptodomex
 zxcvbn
 requests
+pillow
+numpy
