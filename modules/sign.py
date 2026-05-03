@@ -31,30 +31,31 @@ def _pick_coprime_k(p_minus_1: int) -> int:
             return k
 
 
+def sign_message(message: str, public_key, private_key) -> tuple[int, int]:
+    p = public_key.p
+    alpha = public_key.alpha
+    x = private_key.x
+    p_minus_1 = p - 1
+
+    H = int(hash_string(message), 16) % p_minus_1
+
+    while True:
+        k = _pick_coprime_k(p_minus_1)
+        r = pow(alpha, k, p)
+        k_inv = _mod_inverse(k, p_minus_1)
+        s = (k_inv * (H - x * r)) % p_minus_1
+        if s != 0:
+            return r, s
+
+
 def sign_vault(vault_path: str | Path, public_key, private_key) -> tuple:
     path = Path(vault_path)
     vault = json.loads(path.read_text(encoding="utf-8"))
 
     encrypted_vault = vault["encrypted_vault"]
 
-    p = public_key.p
-    alpha = public_key.alpha
-    x = private_key.x
-    p_minus_1 = p - 1
-
-    H = int(hash_string(encrypted_vault), 16) % p_minus_1
-
-    k = _pick_coprime_k(p_minus_1)
-
-    r = pow(alpha, k, p)
-
-    k_inv = _mod_inverse(k, p_minus_1)
-    s = (k_inv * (H - x * r)) % p_minus_1
-
-    r_hex = format(r, 'x')
-    s_hex = format(s, 'x')
-
-    vault["signature"] = {"r": r_hex, "s": s_hex}
+    r, s = sign_message(encrypted_vault, public_key, private_key)
+    vault["signature"] = {"r": format(r, "x"), "s": format(s, "x")}
 
     path.write_text(json.dumps(vault, indent=2), encoding="utf-8")
     return vault

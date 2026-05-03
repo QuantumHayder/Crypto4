@@ -3,6 +3,22 @@ from pathlib import Path
 from modules.hash import hash_string
 
 
+def verify_message(message: str, r: int, s: int, public_key) -> bool:
+    p = public_key.p
+    alpha = public_key.alpha
+    y = public_key.y
+    p_minus_1 = p - 1
+
+    if not (0 < r < p) or not (0 < s < p_minus_1):
+        return False
+
+    H = int(hash_string(message), 16) % p_minus_1
+
+    lhs = pow(alpha, H, p)
+    rhs = (pow(y, r, p) * pow(r, s, p)) % p
+    return lhs == rhs
+
+
 def _computeHash(vault_path: str | Path, public_key) -> bool:
     path = Path(vault_path)
     vault = json.loads(path.read_text(encoding="utf-8"))
@@ -11,21 +27,7 @@ def _computeHash(vault_path: str | Path, public_key) -> bool:
     signature = vault["signature"]
     r = int(signature["r"], 16)
     s = int(signature["s"], 16)
-
-    p = public_key.p
-    alpha = public_key.alpha
-    y = public_key.y
-    p_minus_1 = p - 1
-
-    if (not (0 < r < p) or not (0 < s < p_minus_1)):
-        return False
-
-    H = int(hash_string(encrypted_vault), 16) % p_minus_1
-
-    lhs = pow(alpha, H, p)                       
-    rhs = (pow(y, r, p) * pow(r, s, p)) % p
-
-    return lhs == rhs
+    return verify_message(encrypted_vault, r, s, public_key)
 
 
 def verify_vault(vault_path: str | Path, public_key) -> bool:
