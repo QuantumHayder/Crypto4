@@ -1,42 +1,39 @@
-"""
-CTF 2 — Image Manipulation Solver
-====================================
-Challenge: Two PNG images that look like random noise individually,
-but together they reveal a secret.
-
-Approach:
-This is a classic Visual Cryptography / One-Time Pad challenge.
-Each image is random noise on its own, but one was created by
-XORing the secret image with random data, and the other IS that
-random data. XORing them cancels out the noise and reveals the flag.
-
-    Layer1 = Secret XOR Random
-    Layer2 = Random
-    Layer1 XOR Layer2 = Secret XOR Random XOR Random = Secret
-"""
-
+import os
 from PIL import Image
 import numpy as np
 
+def reveal_secret_flag():
+    """
+    CTF 2 — Visual Cryptography Solver
+    ----------------------------------
+    This script takes two 'noise' images and overlaps them using an 
+    XOR operation to produce the key.
+    """
+    
+    file1, file2 = "Layer1.png", "Layer2.png"
 
-def solve():
-    # Load both noise images
-    img1 = np.array(Image.open("Layer1.png"))
-    img2 = np.array(Image.open("Layer2.png"))
+   
+    if not (os.path.exists(file1) and os.path.exists(file2)):
+        print(f"Damn! I couldn't find {file1} or {file2} in the folder.")
+        return
+    
+    img1 = Image.open(file1)
+    img2 = Image.open(file2)
 
-    print(f"[*] Layer1: {img1.shape}")
-    print(f"[*] Layer2: {img2.shape}")
+    pixels1 = np.array(img1)
+    pixels2 = np.array(img2)
 
-    # XOR pixel-by-pixel — the noise cancels out, revealing the hidden message
-    result = np.bitwise_xor(img1, img2)
+    print(f" Analyzing images -> (Dimensions: {pixels1.shape})")
 
-    # Save the result
-    output = Image.fromarray(result)
-    output.save("ctf2_result.png")
-    output.show()
+    hidden_data = np.bitwise_xor(pixels1, pixels2)
 
-    print("[✓] Result saved to ctf2_result.png — open it to see the flag!")
+    final_image = Image.fromarray(hidden_data)
+    
+    output_filename = "flag_uncovered.png"
+    final_image.save(output_filename)
+    final_image.show()
 
+    print(f"\n Done! Check {output_filename} to find the secret flag.")
 
 if __name__ == "__main__":
-    solve()
+    reveal_secret_flag()
