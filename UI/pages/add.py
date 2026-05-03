@@ -1,7 +1,7 @@
 import streamlit as st
 
 from UI.components import page_header, show_strength
-from vault_service import save_entries, load_entries, verify_master_password
+from modules.vault_encryption import VaultEncryption
 
 
 def render() -> None:
@@ -26,13 +26,14 @@ def render() -> None:
             st.error("All credential fields are required.")
         elif not confirm_pw:
             st.error("Enter your master password to confirm.")
-        elif not verify_master_password(st.session_state.username, confirm_pw):
+        elif not VaultEncryption(st.session_state.username, confirm_pw).verify_password():
             st.error("Incorrect master password.")
         else:
             try:
-                entries = load_entries(st.session_state.username, st.session_state.master_pw)
+                vault = VaultEncryption(st.session_state.username, st.session_state.master_pw)
+                entries = vault.load_entries()
                 entries.append({"website": site, "username": user, "password": pw})
-                save_entries(st.session_state.username, st.session_state.master_pw, entries)
+                vault.save_entries(entries)
                 st.success(f"Credential for **{site}** saved and vault re-signed.")
             except Exception as e:
                 st.error(str(e))

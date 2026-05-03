@@ -205,3 +205,66 @@ def import_vault(export_pkg, d2_dh_priv, d1_signed_dh_pkg, d1_public_key,
     # sign with D2's key
     sign_vault(output_path, d2_public_key, d2_private_key)
     return output_path
+
+
+# ------------------------------------------------------------------ #
+# High-level helpers used by the UI layer                              #
+# ------------------------------------------------------------------ #
+
+def build_export_bundle(sender: str, recipient: str, master_password: str) -> dict:
+    """
+    Run the full DH exchange on behalf of both parties (single-device),
+    encrypt the sender's vault under the session key, and return a JSON-
+    serialisable bundle the recipient can later import.
+    """
+    from modules.elgamal import load_keypair
+
+    d1_pub_k, d1_priv_k = load_keypair(sender)
+    d2_pub_k, d2_priv_k = load_keypair(recipient)
+
+    d1_dh_pub, d1_dh_priv, d1_signed_pkg = device1_start_exchange(d1_pub_k, d1_priv_k)
+    _d2_dh_pub, d2_dh_priv, d2_signed_pkg = device2_respond_to_exchange(
+        d1_signed_pkg, d1_pub_k, d2_pub_k, d2_priv_k
+    )
+
+    vault_path = Path(f"vaults/{sender}/vault.json")
+    export_pkg = export_vault(
+        vault_path, master_password,
+        d1_dh_priv, d2_signed_pkg,
+        d1_pub_k, d1_priv_k, d2_pub_k,
+    )
+
+    return {
+        "sender": sender,
+        "d1_signed_dh_pkg": d1_signed_pkg,
+        "d2_dh_priv": d2_dh_priv.value,
+        "export_pkg": export_pkg,
+    }
+
+
+def receive_import_bundle(bundle: dict, recipient_username: str, new_master_password: str) -> str:
+    """
+    Verify signatures, re-derive the shared secret, decrypt the bundle,
+    and re-encrypt+save the vault under new_master_password.
+    Returns the sender's username.
+    """
+    from modules.elgamal import load_keypair, load_public_key_only
+
+    sender = bundle["sender"]
+    d1_pub_k = load_public_key_only(sender)
+    d2_pub_k, d2_priv_k = load_keypair(recipient_username)
+
+    d2_dh_priv = DHPrivateKey(value=bundle["d2_dh_priv"])
+    output_path = Path(f"vaults/{recipient_username}/vault.json")
+
+    import_vault(
+        bundle["export_pkg"],
+        d2_dh_priv,
+        bundle["d1_signed_dh_pkg"],
+        d1_pub_k,
+        d2_pub_k,
+        d2_priv_k,
+        new_master_password,
+        output_path,
+    )
+    return sender

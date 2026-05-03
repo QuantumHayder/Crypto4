@@ -1,7 +1,7 @@
 import streamlit as st
 
 from UI.components import show_strength
-from vault_service import user_exists, register_user, load_entries
+from modules.vault_encryption import VaultEncryption, user_exists, register_user
 
 
 def render() -> None:
@@ -34,7 +34,7 @@ def _render_login() -> None:
             st.error("No account found for that username.")
         else:
             try:
-                load_entries(uname, pw)   # raises on bad password or bad signature
+                VaultEncryption(uname, pw).load_entries()   # raises on bad password or bad signature
                 st.session_state.logged_in = True
                 st.session_state.username  = uname
                 st.session_state.master_pw = pw
@@ -60,6 +60,7 @@ def _render_register() -> None:
         else:
             try:
                 register_user(new_u, new_pw)
+
                 st.success("Account created. You can sign in now.")
             except Exception as e:
                 st.error(str(e))

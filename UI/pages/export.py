@@ -2,7 +2,8 @@ import json
 import streamlit as st
 
 from UI.components import page_header
-from vault_service import user_exists, build_export_bundle
+from modules.vault_encryption import user_exists
+from diffie_hellman_export import build_export_bundle
 
 
 def render() -> None:

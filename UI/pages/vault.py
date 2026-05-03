@@ -1,11 +1,11 @@
 import streamlit as st
 
-from vault_service import load_entries, save_entries, verify_master_password
+from modules.vault_encryption import VaultEncryption
 
 
 def render() -> None:
     try:
-        entries = load_entries(st.session_state.username, st.session_state.master_pw)
+        entries = VaultEncryption(st.session_state.username, st.session_state.master_pw).load_entries()
     except Exception as e:
         st.error(str(e))
         st.stop()
@@ -99,7 +99,7 @@ def _confirm_show(i: int, e: dict) -> None:
         if st.button("Show password", key=f"confirm_show_{i}", type="primary"):
             if not confirm_pw:
                 st.error("Enter your master password to confirm.")
-            elif not verify_master_password(st.session_state.username, confirm_pw):
+            elif not VaultEncryption(st.session_state.username, confirm_pw).verify_password():
                 st.error("Incorrect master password.")
             else:
                 st.code(e["password"], language=None)
@@ -122,7 +122,7 @@ def _confirm_edit(i: int, e: dict, entries: list[dict]) -> None:
         if st.button("Confirm", key=f"confirm_edit_{i}", type="primary"):
             if not confirm_pw:
                 st.error("Enter your master password to confirm.")
-            elif not verify_master_password(st.session_state.username, confirm_pw):
+            elif not VaultEncryption(st.session_state.username, confirm_pw).verify_password():
                 st.error("Incorrect master password.")
             else:
                 st.session_state.confirm_action = {i: "edit_unlocked"}
@@ -144,7 +144,7 @@ def _confirm_edit_unlocked(i: int, e: dict, entries: list[dict]) -> None:
     with col_save:
         if st.button("Save changes", key=f"sv_{i}", type="primary"):
             entries[i] = {"website": ns, "username": nu, "password": np_}
-            save_entries(st.session_state.username, st.session_state.master_pw, entries)
+            VaultEncryption(st.session_state.username, st.session_state.master_pw).save_entries(entries)
             st.session_state.confirm_action = {}
             st.rerun()
     with col_cancel:
@@ -164,11 +164,11 @@ def _confirm_delete(i: int, e: dict, entries: list[dict]) -> None:
         if st.button("Confirm Delete", key=f"confirm_del_{i}", type="primary"):
             if not confirm_pw:
                 st.error("Enter your master password to confirm.")
-            elif not verify_master_password(st.session_state.username, confirm_pw):
+            elif not VaultEncryption(st.session_state.username, confirm_pw).verify_password():
                 st.error("Incorrect master password.")
             else:
                 entries.pop(i)
-                save_entries(st.session_state.username, st.session_state.master_pw, entries)
+                VaultEncryption(st.session_state.username, st.session_state.master_pw).save_entries(entries)
                 st.session_state.confirm_action = {}
                 st.rerun()
     with col_cancel:

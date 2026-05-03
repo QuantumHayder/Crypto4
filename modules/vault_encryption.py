@@ -1,7 +1,7 @@
 from .encryption import AES_Encryption
 from .sign import sign_vault
 from .verify import verify_vault
-from .elgamal import load_keypair
+from .elgamal import load_keypair, generate_keypair, save_keypair
 
 from pathlib import Path
 import json
@@ -89,5 +89,39 @@ class VaultEncryption:
         del entries[entry_index]
         # 6) Resign vault file
         # Module 3 function -> Waiting
-        
+
         return self._save_vault(entries)
+
+    # ------------------------------------------------------------------ #
+    # Public helpers used by the UI layer                                  #
+    # ------------------------------------------------------------------ #
+
+    def load_entries(self) -> list[dict]:
+        return self._load_vault()
+
+    def save_entries(self, entries: list[dict]) -> None:
+        self._save_vault(entries)
+
+    def verify_password(self) -> bool:
+        """Return True if self.password successfully decrypts the vault."""
+        try:
+            self._load_vault()
+            return True
+        except Exception:
+            return False
+
+
+# ------------------------------------------------------------------ #
+# Module-level helpers for user lifecycle                              #
+# ------------------------------------------------------------------ #
+
+def user_exists(username: str) -> bool:
+    return Path(f"vaults/{username}").exists()
+
+
+def register_user(username: str, master_password: str) -> None:
+    if user_exists(username):
+        raise ValueError(f"User '{username}' already exists.")
+    pub_k, priv_k = generate_keypair(username)
+    save_keypair(pub_k, priv_k, username)
+    VaultEncryption(username, master_password)._save_vault([])

@@ -2,7 +2,7 @@ import json
 import streamlit as st
 
 from UI.components import page_header, show_strength
-from vault_service import receive_import_bundle
+from diffie_hellman_export import receive_import_bundle
 
 
 def render() -> None:
