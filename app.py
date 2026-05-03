@@ -9,6 +9,7 @@ from zxcvbn import zxcvbn
 
 from modules.elgamal import generate_keypair, save_keypair, load_keypair
 from modules.encryption import AES_Encryption
+from modules.vault_encryption import VaultEncryption
 from modules.sign import sign_vault
 from modules.verify import verify_vault
 from diffie_hellman_export import (
@@ -22,7 +23,7 @@ from diffie_hellman_export import (
 VAULTS_DIR = Path("vaults")
 
 
-# helpers
+# ── helpers ──
 
 def vault_path(username):
     return VAULTS_DIR / username / "vault.json"
@@ -31,40 +32,29 @@ def user_exists(username):
     return vault_path(username).exists()
 
 def init_vault(username, master_password):
+    """Create a brand-new empty vault for a freshly registered user."""
     path = vault_path(username)
     path.parent.mkdir(parents=True, exist_ok=True)
     empty = json.dumps({"entries": []})
     enc = AES_Encryption(master_password).encrypt(empty)
-    path.write_text(json.dumps({"encrypted_vault": enc, "signature": {}}, indent=2), encoding="utf-8")
-    pub, priv = load_keypair(username)
-    sign_vault(path, pub, priv)
-
-def load_entries(username, master_pw):
-    path = vault_path(username)
-    pub, _ = load_keypair(username)
-    if not verify_vault(path, pub):
-        raise Exception("Vault signature check failed — vault may have been tampered with.")
-    data = json.loads(path.read_text(encoding="utf-8"))
-    try:
-        plain = AES_Encryption(master_pw).decrypt(data["encrypted_vault"])
-    except Exception:
-        raise Exception("Wrong master password.")
-    return json.loads(plain)["entries"]
-
-def save_entries(username, master_pw, entries):
-    path = vault_path(username)
-    enc = AES_Encryption(master_pw).encrypt(json.dumps({"entries": entries}))
-    path.write_text(json.dumps({"encrypted_vault": enc, "signature": {}}, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps({"encrypted_vault": enc, "signature": {}}, indent=2),
+        encoding="utf-8",
+    )
     pub, priv = load_keypair(username)
     sign_vault(path, pub, priv)
 
 def verify_master_password(username, pw):
     """Returns True if pw correctly decrypts the vault."""
     try:
-        load_entries(username, pw)
+        vm = VaultEncryption(username, pw)
+        vm._load_vault()
         return True
     except Exception:
         return False
+
+
+# ── password strength meter ──
 
 STRENGTH_COLORS = ["#e05252", "#e05252", "#d4922a", "#3abf7e", "#27a864"]
 STRENGTH_LABELS = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"]
@@ -83,7 +73,7 @@ def show_strength(pw, key_suffix=""):
         f'<div style="display:flex;gap:4px;margin:6px 0 2px">{bars_html}</div>'
         f'<p style="font-size:0.78rem;color:{STRENGTH_COLORS[score]};margin:0 0 8px">'
         f'{STRENGTH_LABELS[score]}</p>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     if score < 2:
         tips = r.get("feedback", {}).get("suggestions", [])
@@ -92,7 +82,7 @@ def show_strength(pw, key_suffix=""):
     return score
 
 
-# page config & global CSS
+# ── page config & global CSS ──
 
 st.set_page_config(page_title="Vault", layout="centered")
 
@@ -335,21 +325,20 @@ code, .stCode { font-family: var(--mono) !important; background: var(--surface) 
 """, unsafe_allow_html=True)
 
 
-# session defaults
+# ── session defaults ──
 
 for k, v in {
     "logged_in": False,
     "username": "",
     "master_pw": "",
     "page": "login",
-    # per-entry confirm state: { index -> "edit"|"delete" }
     "confirm_action": {},
 }.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 
-# sidebar (logged in)
+# ── sidebar (logged in) ──
 
 if st.session_state.logged_in:
     with st.sidebar:
@@ -358,18 +347,16 @@ if st.session_state.logged_in:
             f'letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Logged in as</div>'
             f'<div style="font-family:var(--mono);font-size:1rem;font-weight:600;color:#e0e0f0;'
             f'margin-bottom:1.2rem">{st.session_state.username}</div>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
         st.divider()
         nav = [
-            ("🗄  My Vault",         "vault"),
-            ("＋  Add Credential",   "add"),
-            ("↑   Export Vault",     "export"),
-            ("↓   Import Vault",     "import"),
+            ("🗄  My Vault",        "vault"),
+            ("＋  Add Credential",  "add"),
+            ("↑   Export Vault",    "export"),
+            ("↓   Import Vault",    "import"),
         ]
         for label, pg in nav:
-            active = st.session_state.page == pg
-            style = "border-color:var(--accent) !important;color:var(--accent) !important;" if active else ""
             if st.button(label, use_container_width=True, key=f"nav_{pg}"):
                 st.session_state.page = pg
                 st.session_state.confirm_action = {}
@@ -377,26 +364,31 @@ if st.session_state.logged_in:
         st.divider()
         if st.button("Sign Out", use_container_width=True, key="signout"):
             for k in ["logged_in", "username", "master_pw", "confirm_action"]:
-                st.session_state[k] = False if k == "logged_in" else ({} if k == "confirm_action" else "")
+                st.session_state[k] = (
+                    False if k == "logged_in"
+                    else ({} if k == "confirm_action" else "")
+                )
             st.session_state.page = "login"
             st.rerun()
 
 
-# LOGIN / REGISTER
+# ══════════════════════════════════════════════
+#  LOGIN / REGISTER
+# ══════════════════════════════════════════════
 
 if not st.session_state.logged_in:
     st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
     st.markdown(
         '<div class="login-brand">vault</div>'
         '<div class="login-sub">CMPS426 · Cairo University · Secure Password Manager</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     login_tab, reg_tab = st.tabs(["sign_in", "register"])
 
     with login_tab:
         uname = st.text_input("Username", key="li_u", placeholder="your username")
-        pw    = st.text_input("Master Password", type="password", key="li_p", placeholder="••••••••••")
+        pw = st.text_input("Master Password", type="password", key="li_p", placeholder="••••••••••")
         if st.button("Sign In →", type="primary", use_container_width=True, key="li_btn"):
             if not uname or not pw:
                 st.error("Both fields are required.")
@@ -404,19 +396,20 @@ if not st.session_state.logged_in:
                 st.error("No account found for that username.")
             else:
                 try:
-                    load_entries(uname, pw)
+                    vm = VaultEncryption(uname, pw)
+                    vm._load_vault()  # will raise if bad password or bad signature
                     st.session_state.logged_in = True
-                    st.session_state.username  = uname
+                    st.session_state.username = uname
                     st.session_state.master_pw = pw
-                    st.session_state.page      = "vault"
+                    st.session_state.page = "vault"
                     st.rerun()
                 except Exception as e:
                     st.error(str(e))
 
     with reg_tab:
-        new_u  = st.text_input("Username", key="reg_u", placeholder="choose a username")
+        new_u = st.text_input("Username", key="reg_u", placeholder="choose a username")
         new_pw = st.text_input("Master Password", type="password", key="reg_p", placeholder="••••••••••")
-        score  = show_strength(new_pw, "reg")
+        score = show_strength(new_pw, "reg")
         st.caption("Master password must be Strong (score ≥ 3). It cannot be recovered if lost.")
 
         if st.button("Create Account →", type="primary", use_container_width=True, key="reg_btn"):
@@ -435,15 +428,19 @@ if not st.session_state.logged_in:
                 except Exception as e:
                     st.error(str(e))
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 
-# MY VAULT
+# ══════════════════════════════════════════════
+#  MY VAULT
+# ══════════════════════════════════════════════
 
 if st.session_state.page == "vault":
+    vm = VaultEncryption(st.session_state.username, st.session_state.master_pw)
+
     try:
-        entries = load_entries(st.session_state.username, st.session_state.master_pw)
+        entries = vm._load_vault()
     except Exception as e:
         st.error(str(e))
         st.stop()
@@ -453,26 +450,32 @@ if st.session_state.page == "vault":
 
     sig_html = (
         '<span class="sig-ok">✔ signature valid</span>'
-        if sig_ok else
-        '<span class="sig-fail">✘ signature invalid — vault may be tampered</span>'
+        if sig_ok
+        else '<span class="sig-fail">✘ signature invalid — vault may be tampered</span>'
     )
-    count_html = f'<span class="count-badge">{len(entries)} credential{"s" if len(entries) != 1 else ""} stored</span>'
+    count_html = (
+        f'<span class="count-badge">'
+        f'{len(entries)} credential{"s" if len(entries) != 1 else ""} stored'
+        f'</span>'
+    )
 
     st.markdown(
         f'<div class="vault-header">'
         f'<h1>My Vault</h1>{sig_html}'
         f'</div>'
         f'{count_html}',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     st.divider()
 
     if not entries:
         st.markdown(
-            '<div style="text-align:center;padding:3rem 0;color:var(--muted);font-family:var(--mono);font-size:0.85rem">'
-            'vault is empty<br><span style="font-size:0.72rem;opacity:0.6">add a credential from the sidebar</span>'
-            '</div>',
-            unsafe_allow_html=True
+            '<div style="text-align:center;padding:3rem 0;color:var(--muted);'
+            'font-family:var(--mono);font-size:0.85rem">'
+            'vault is empty<br>'
+            '<span style="font-size:0.72rem;opacity:0.6">add a credential from the sidebar</span>'
+            "</div>",
+            unsafe_allow_html=True,
         )
     else:
         for i, e in enumerate(entries):
@@ -481,7 +484,7 @@ if st.session_state.page == "vault":
                 f'<div class="entry-site">{e["website"]}</div>'
                 f'<div class="entry-user">{e["username"]}</div>'
                 f'</div>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
             c1, c2, c3 = st.columns([3, 2, 2])
@@ -490,16 +493,22 @@ if st.session_state.page == "vault":
             with c1:
                 if st.button("Show password", key=f"showbtn_{i}"):
                     current = st.session_state.confirm_action.get(i)
-                    st.session_state.confirm_action = {i: "show"} if current != "show" else {}
+                    st.session_state.confirm_action = (
+                        {i: "show"} if current != "show" else {}
+                    )
                     st.rerun()
 
-            # Confirm: Show password
             if st.session_state.confirm_action.get(i) == "show":
                 st.markdown(
-                    f'<div class="confirm-box"><p>confirm identity to show the password for "{e["website"]}"</p></div>',
-                    unsafe_allow_html=True
+                    f'<div class="confirm-box">'
+                    f'<p>confirm identity to show the password for "{e["website"]}"</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
-                confirm_pw = st.text_input("Master Password", type="password", key=f"show_pw_{i}", placeholder="••••••••••")
+                confirm_pw = st.text_input(
+                    "Master Password", type="password",
+                    key=f"show_pw_{i}", placeholder="••••••••••",
+                )
                 col_show, col_cancel = st.columns([1, 1])
                 with col_show:
                     if st.button("Show password", key=f"confirm_show_{i}", type="primary"):
@@ -517,26 +526,35 @@ if st.session_state.page == "vault":
 
             # Edit
             with c2:
-                edit_key = f"edit_{i}"
                 if st.button("Edit", key=f"editbtn_{i}"):
                     current = st.session_state.confirm_action.get(i)
-                    st.session_state.confirm_action = {i: "edit"} if current != "edit" else {}
+                    st.session_state.confirm_action = (
+                        {i: "edit"} if current != "edit" else {}
+                    )
                     st.rerun()
 
             # Delete
             with c3:
                 if st.button("Delete", key=f"delbtn_{i}"):
                     current = st.session_state.confirm_action.get(i)
-                    st.session_state.confirm_action = {i: "delete"} if current != "delete" else {}
+                    st.session_state.confirm_action = (
+                        {i: "delete"} if current != "delete" else {}
+                    )
                     st.rerun()
 
             # Confirm: Edit
             if st.session_state.confirm_action.get(i) == "edit":
-                st.markdown('<div class="confirm-box"><p>confirm identity to edit this entry</p>', unsafe_allow_html=True)
-                confirm_pw = st.text_input("Master Password", type="password", key=f"edit_pw_{i}", placeholder="••••••••••")
-                ns = st.text_input("Website",  value=e["website"],  key=f"es_{i}")
+                st.markdown(
+                    '<div class="confirm-box"><p>confirm identity to edit this entry</p>',
+                    unsafe_allow_html=True,
+                )
+                confirm_pw = st.text_input(
+                    "Master Password", type="password",
+                    key=f"edit_pw_{i}", placeholder="••••••••••",
+                )
+                ns = st.text_input("Website", value=e["website"], key=f"es_{i}")
                 nu = st.text_input("Username", value=e["username"], key=f"eu_{i}")
-                np = st.text_input("Password", value=e["password"], key=f"ep_{i}", type="password")
+                np_ = st.text_input("Password", value=e["password"], key=f"ep_{i}", type="password")
                 col_save, col_cancel = st.columns([1, 1])
                 with col_save:
                     if st.button("Save changes", key=f"sv_{i}", type="primary"):
@@ -545,23 +563,28 @@ if st.session_state.page == "vault":
                         elif not verify_master_password(st.session_state.username, confirm_pw):
                             st.error("Incorrect master password.")
                         else:
-                            entries[i] = {"website": ns, "username": nu, "password": np}
-                            save_entries(st.session_state.username, st.session_state.master_pw, entries)
+                            entries[i] = {"website": ns, "username": nu, "password": np_}
+                            vm._save_vault(entries)
                             st.session_state.confirm_action = {}
                             st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key=f"cancel_edit_{i}"):
                         st.session_state.confirm_action = {}
                         st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # Confirm: Delete
             if st.session_state.confirm_action.get(i) == "delete":
                 st.markdown(
-                    f'<div class="confirm-box"><p>⚠ confirm deletion of "{e["website"]}"</p></div>',
-                    unsafe_allow_html=True
+                    f'<div class="confirm-box">'
+                    f'<p>⚠ confirm deletion of "{e["website"]}"</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
-                confirm_pw = st.text_input("Master Password", type="password", key=f"del_pw_{i}", placeholder="••••••••••")
+                confirm_pw = st.text_input(
+                    "Master Password", type="password",
+                    key=f"del_pw_{i}", placeholder="••••••••••",
+                )
                 col_del, col_cancel = st.columns([1, 1])
                 with col_del:
                     if st.button("Confirm Delete", key=f"confirm_del_{i}", type="primary"):
@@ -571,7 +594,7 @@ if st.session_state.page == "vault":
                             st.error("Incorrect master password.")
                         else:
                             entries.pop(i)
-                            save_entries(st.session_state.username, st.session_state.master_pw, entries)
+                            vm._save_vault(entries)
                             st.session_state.confirm_action = {}
                             st.rerun()
                 with col_cancel:
@@ -580,26 +603,41 @@ if st.session_state.page == "vault":
                         st.rerun()
 
 
-# ADD CREDENTIAL
+# ══════════════════════════════════════════════
+#  ADD CREDENTIAL
+# ══════════════════════════════════════════════
 
 elif st.session_state.page == "add":
-    st.markdown('<div class="page-label">Module 2 — Vault Encryption</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Add Credential</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Entry is encrypted immediately with your master password and re-signed.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="page-label">Module 2 — Vault Encryption</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-title">Add Credential</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-sub">Entry is encrypted immediately with your '
+        "master password and re-signed.</div>",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
-    site    = st.text_input("Website / Service", placeholder="e.g. github.com")
-    user    = st.text_input("Username / Email",  placeholder="e.g. user@example.com")
-    pw      = st.text_input("Password",          type="password", placeholder="••••••••••")
+    site = st.text_input("Website / Service", placeholder="e.g. github.com")
+    user = st.text_input("Username / Email", placeholder="e.g. user@example.com")
+    pw = st.text_input("Password", type="password", placeholder="••••••••••")
     show_strength(pw, "add")
 
     st.markdown("---")
     st.markdown(
         '<div style="font-size:0.75rem;color:var(--muted);font-family:var(--mono);margin-bottom:6px">'
-        'master password required to write to vault</div>',
-        unsafe_allow_html=True
+        "master password required to write to vault</div>",
+        unsafe_allow_html=True,
     )
-    confirm_pw = st.text_input("Master Password", type="password", key="add_confirm_pw", placeholder="••••••••••")
+    confirm_pw = st.text_input(
+        "Master Password", type="password",
+        key="add_confirm_pw", placeholder="••••••••••",
+    )
 
     if st.button("Save to Vault →", type="primary", use_container_width=True):
         if not site or not user or not pw:
@@ -610,29 +648,39 @@ elif st.session_state.page == "add":
             st.error("Incorrect master password.")
         else:
             try:
-                entries = load_entries(st.session_state.username, st.session_state.master_pw)
-                entries.append({"website": site, "username": user, "password": pw})
-                save_entries(st.session_state.username, st.session_state.master_pw, entries)
+                vm = VaultEncryption(st.session_state.username, st.session_state.master_pw)
+                vm.add(site, user, pw)
                 st.success(f"Credential for **{site}** saved and vault re-signed.")
             except Exception as e:
                 st.error(str(e))
 
 
-# EXPORT VAULT
+# ══════════════════════════════════════════════
+#  EXPORT VAULT
+# ══════════════════════════════════════════════
 
 elif st.session_state.page == "export":
-    st.markdown('<div class="page-label">Module 4 — Diffie-Hellman Export</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Export Vault</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Securely transfer your vault to another registered user.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="page-label">Module 4 — Diffie-Hellman Export</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-title">Export Vault</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-sub">Securely transfer your vault to another registered user.</div>',
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     st.markdown(
         '<div class="dh-info">'
-        'Key Exchange: ephemeral DH keypairs are generated, mutually signed with ElGamal, '
-        'and used to derive a one-time AES-256 session key. The vault is re-encrypted '
-        'under this session key before transmission.'
-        '</div>',
-        unsafe_allow_html=True
+        "Key Exchange: ephemeral DH keypairs are generated, mutually signed with ElGamal, "
+        "and used to derive a one-time AES-256 session key. The vault is re-encrypted "
+        "under this session key before transmission."
+        "</div>",
+        unsafe_allow_html=True,
     )
 
     recipient = st.text_input("Recipient username", placeholder="their username on this system")
@@ -650,7 +698,9 @@ elif st.session_state.page == "export":
                     d1_pub, d1_priv = load_keypair(st.session_state.username)
                     d2_pub, d2_priv = load_keypair(recipient)
 
-                    d1_dh_pub, d1_dh_priv, d1_signed_dh = device1_start_exchange(d1_pub, d1_priv)
+                    d1_dh_pub, d1_dh_priv, d1_signed_dh = device1_start_exchange(
+                        d1_pub, d1_priv
+                    )
                     d2_dh_pub, d2_dh_priv, d2_signed_dh = device2_respond_to_exchange(
                         d1_signed_dh, d1_pub, d2_pub, d2_priv
                     )
@@ -666,11 +716,11 @@ elif st.session_state.page == "export":
                     )
 
                     bundle = {
-                        "export_pkg":   pkg,
+                        "export_pkg": pkg,
                         "d1_signed_dh": d1_signed_dh,
-                        "d2_dh_priv":   d2_dh_priv.value,
-                        "sender":       st.session_state.username,
-                        "recipient":    recipient,
+                        "d2_dh_priv": d2_dh_priv.value,
+                        "sender": st.session_state.username,
+                        "recipient": recipient,
                     }
 
                 st.success("Export package ready. Download and share it with the recipient.")
@@ -684,25 +734,40 @@ elif st.session_state.page == "export":
                 st.error(str(e))
 
 
-# IMPORT VAULT
+# ══════════════════════════════════════════════
+#  IMPORT VAULT
+# ══════════════════════════════════════════════
 
 elif st.session_state.page == "import":
-    st.markdown('<div class="page-label">Module 4 — Diffie-Hellman Import</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Import Vault</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Import a vault bundle that was exported to you.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="page-label">Module 4 — Diffie-Hellman Import</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-title">Import Vault</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="section-sub">Import a vault bundle that was exported to you.</div>',
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     st.markdown(
         '<div class="dh-info">'
         "The bundle's ElGamal signature is verified before decryption. "
-        'If verification fails the import is aborted. '
-        'The vault is then re-encrypted under your chosen master password and re-signed with your key.'
-        '</div>',
-        unsafe_allow_html=True
+        "If verification fails the import is aborted. "
+        "The vault is then re-encrypted under your chosen master password "
+        "and re-signed with your key."
+        "</div>",
+        unsafe_allow_html=True,
     )
 
     uploaded = st.file_uploader("Upload export_bundle.json", type="json")
-    new_pw   = st.text_input("New master password for this vault", type="password", placeholder="••••••••••")
+    new_pw = st.text_input(
+        "New master password for this vault",
+        type="password", placeholder="••••••••••",
+    )
     show_strength(new_pw, "imp")
     st.caption("This will replace your current vault. Choose a strong password.")
 
@@ -716,11 +781,13 @@ elif st.session_state.page == "import":
                 bundle = json.loads(uploaded.read())
 
                 if bundle["recipient"] != st.session_state.username:
-                    st.error(f"This bundle is addressed to '{bundle['recipient']}', not you.")
+                    st.error(
+                        f"This bundle is addressed to '{bundle['recipient']}', not you."
+                    )
                     st.stop()
 
-                sender     = bundle["sender"]
-                d1_pub, _  = load_keypair(sender)
+                sender = bundle["sender"]
+                d1_pub, _ = load_keypair(sender)
                 d2_pub, d2_priv = load_keypair(st.session_state.username)
 
                 with st.spinner("Verifying signatures and decrypting…"):

@@ -1,5 +1,9 @@
-from encryption import AES_Encryption
+from .encryption import AES_Encryption
+from .sign import sign_vault
+from .verify import verify_vault
+from .elgamal import load_keypair
 
+from pathlib import Path
 import json
 from enum import Enum
 
@@ -22,57 +26,68 @@ class VaultEncryption:
         key. This data key is used to encrypt and decrypt the entire vault file.
     """
     
-    def __init__(self, password: str):
+    def __init__(self, username: str,password: str):
+        self.username = username
         self.password = password
         self.aes_object = AES_Encryption(password)
 
-    def _load_vault(self, vault_path: str = '/Crypto4/vault'):
-         # 1) retrieve vault file
-        with open(vault_path, "r") as file:
-            vault = file.read()
-        # 2) decrypt vault using data_key
-        try:
-            plain_vault = self.aes_object.decrypt(vault)
-        except ValueError:
-            raise Exception("Wrong password — vault authentication failed")
+    def _load_vault(self):
+         # 1) retrieve vault file if present
+        vault_path = Path(f"vaults/{self.username}/vault.json")
         
-        return json.loads(plain_vault)
+        #2) verify vault
+        pub_k, _ = load_keypair(self.username)
+        if not verify_vault(vault_path, pub_k):
+            raise Exception("Signature invalid — vault may be tampered.")
+        
+        # 2) decrypt vault using data_key
+        # Then decrypt
+        data = json.loads(vault_path.read_text(encoding="utf-8"))
+        plain = self.aes_object.decrypt(data["encrypted_vault"])
+        return json.loads(plain)["entries"]
     
-    def _save_vault(self, vault_dict, vault_path="/Crypto4/vault"):
-        vault = self.aes_object.encrypt(json.dumps(vault_dict))
-        with open(vault_path, "w", encoding="utf-8") as f:
-            f.write(vault)
-        return vault
+    def _save_vault(self, entries):  # rename param to 'entries' for clarity
+        vault_path = Path(f"vaults/{self.username}/vault.json")
+        # Encrypt the INNER structure
+        encrypted_vault = self.aes_object.encrypt(json.dumps({"entries": entries}))
+        
+        # Write the OUTER structure to disk
+        vault_path.write_text(json.dumps({"encrypted_vault": encrypted_vault, "signature": {}}, indent=2))
+        # Then sign
+        pub_k, priv_k = load_keypair(self.username)
+        sign_vault(vault_path, pub_k, priv_k)
+        
+
     
-    def add(self, website: str, username: str, password: str):
-        vault_dict = self._load_vault()
+    def add(self, website: str, username: str,password: str):
+        entries  = self._load_vault()
         # 4) Modify vault file
-        vault_dict["entries"].append({
-            "website": website,
-            "username": username,
-            "password": password
+        entries.append({
+        "website": website,
+        "username": username,
+        "password": password
         })
         # 6) Resign vault file
         # Module 3 function -> Waiting
-        return self._save_vault(vault_dict)
+        return self._save_vault(entries)
     
     def retrieve(self, entry_index: int, entry: Entry):
-        vault_dict = self._load_vault()
-        return vault_dict["entries"][entry_index][entry.value]
+        entries = self._load_vault()
+        return entries[entry_index][entry.value]
     
     def update(self, entry_index: int, entry: Entry, value: str):
-        vault_dict = self._load_vault()
+        entries = self._load_vault()
         # 4) Modify vault file
-        vault_dict["entries"][entry_index][entry.value] = value
+        entries[entry_index][entry.value] = value
         # 6) Resign vault file
         # Module 3 function -> Waiting
-        return self._save_vault(vault_dict)
+        return self._save_vault(entries)
     
     def delete(self, entry_index: int):
-        vault_dict = self._load_vault()
+        entries = self._load_vault()
         # 4) Delete vault entry
-        del vault_dict["entries"][entry_index]
+        del entries[entry_index]
         # 6) Resign vault file
         # Module 3 function -> Waiting
         
-        return self._save_vault(vault_dict)
+        return self._save_vault(entries)

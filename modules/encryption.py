@@ -18,40 +18,32 @@ TAG_LENGTH = 16
 ##################################################################################################
 #symmetric encryption
 
+IV_LENGTH = 12
+TAG_LENGTH = 16
+
 class AES_Encryption:
     def __init__(self, password: str):
-        self.password = password
-    def encrypt(self, plain_message:str):
-        salt = get_random_bytes(SALT_LENGTH) 
+        # Per spec: SHA-256 of master password IS the AES data key
+        self.key = hashlib.sha256(password.encode()).digest()  # 32 bytes = AES-256
+
+    def encrypt(self, plain_message: str):
         iv = get_random_bytes(IV_LENGTH)
-
-        secret = self.get_secret_key(self.password, salt)
-        
-        cipher = AES.new(secret, AES.MODE_GCM, iv)
-
+        cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
         encrypted_message_byte, tag = cipher.encrypt_and_digest(
             plain_message.encode("utf-8")
         )
-        cipher_byte = salt + iv + encrypted_message_byte + tag
+        cipher_byte = iv + encrypted_message_byte + tag
+        return base64.b64encode(cipher_byte).decode()
 
-        encoded_cipher_byte = base64.b64encode(cipher_byte)
-        return bytes.decode(encoded_cipher_byte)
-
-    def decrypt(self, cipher_message):
-        decoded_cipher_byte = base64.b64decode(cipher_message)
-
-        salt = decoded_cipher_byte[:SALT_LENGTH]
-        iv = decoded_cipher_byte[SALT_LENGTH : (SALT_LENGTH + IV_LENGTH)]
-        encrypted_message_byte = decoded_cipher_byte[
-            (IV_LENGTH + SALT_LENGTH) : -TAG_LENGTH
-        ]
-        tag = decoded_cipher_byte[-TAG_LENGTH:]
-        secret = self.get_secret_key(self.password, salt)
-        cipher = AES.new(secret, AES.MODE_GCM, iv)
-
-        decrypted_message_byte = cipher.decrypt_and_verify(encrypted_message_byte, tag)
-        return decrypted_message_byte.decode("utf-8")
-
+    def decrypt(self, cipher_message: str):
+        decoded = base64.b64decode(cipher_message)
+        iv = decoded[:IV_LENGTH]
+        encrypted_message_byte = decoded[IV_LENGTH:-TAG_LENGTH]
+        tag = decoded[-TAG_LENGTH:]
+        cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
+        decrypted = cipher.decrypt_and_verify(encrypted_message_byte, tag)
+        return decrypted.decode("utf-8")
+    
     def get_secret_key(self, password, salt):
         return hashlib.pbkdf2_hmac(
             HASH_NAME, password.encode(), salt, ITERATION_COUNT, KEY_LENGTH
