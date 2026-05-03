@@ -73,6 +73,8 @@ def _render_entry(i: int, e: dict, entries: list[dict]) -> None:
         _confirm_show(i, e)
     elif action == "edit":
         _confirm_edit(i, e, entries)
+    elif action == "edit_unlocked":
+        _confirm_edit_unlocked(i, e, entries)
     elif action == "delete":
         _confirm_delete(i, e, entries)
 
@@ -114,23 +116,39 @@ def _confirm_edit(i: int, e: dict, entries: list[dict]) -> None:
         unsafe_allow_html=True,
     )
     confirm_pw = _confirm_password_input(f"edit_pw_{i}")
-    ns  = st.text_input("Website",  value=e["website"],  key=f"es_{i}")
-    nu  = st.text_input("Username", value=e["username"], key=f"eu_{i}")
-    np_ = st.text_input("Password", value=e["password"], key=f"ep_{i}", type="password")
-    col_save, col_cancel = st.columns([1, 1])
-    with col_save:
-        if st.button("Save changes", key=f"sv_{i}", type="primary"):
+    col_confirm, col_cancel = st.columns([1, 1])
+
+    with col_confirm:
+        if st.button("Confirm", key=f"confirm_edit_{i}", type="primary"):
             if not confirm_pw:
                 st.error("Enter your master password to confirm.")
             elif not verify_master_password(st.session_state.username, confirm_pw):
                 st.error("Incorrect master password.")
             else:
-                entries[i] = {"website": ns, "username": nu, "password": np_}
-                save_entries(st.session_state.username, st.session_state.master_pw, entries)
-                st.session_state.confirm_action = {}
+                st.session_state.confirm_action = {i: "edit_unlocked"}
                 st.rerun()
+
     with col_cancel:
         if st.button("Cancel", key=f"cancel_edit_{i}"):
+            st.session_state.confirm_action = {}
+            st.rerun()
+
+
+def _confirm_edit_unlocked(i: int, e: dict, entries: list[dict]) -> None:
+    """Render the edit form only after identity has been confirmed."""
+    ns  = st.text_input("Website",  value=e["website"],  key=f"es_{i}")
+    nu  = st.text_input("Username", value=e["username"], key=f"eu_{i}")
+    np_ = st.text_input("Password", value=e["password"], key=f"ep_{i}", type="password")
+
+    col_save, col_cancel = st.columns([1, 1])
+    with col_save:
+        if st.button("Save changes", key=f"sv_{i}", type="primary"):
+            entries[i] = {"website": ns, "username": nu, "password": np_}
+            save_entries(st.session_state.username, st.session_state.master_pw, entries)
+            st.session_state.confirm_action = {}
+            st.rerun()
+    with col_cancel:
+        if st.button("Cancel", key=f"cancel_edit_unlocked_{i}"):
             st.session_state.confirm_action = {}
             st.rerun()
 
