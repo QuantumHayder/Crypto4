@@ -11,10 +11,17 @@ def _gcd(a: int, b: int) -> int:
 
 
 def _extended_gcd(a: int, b: int):
-    if b == 0:
-        return a, 1, 0
-    g, x, y = _extended_gcd(b, a % b)
-    return g, y, x - (a // b) * y
+    old_r, r = a, b
+    old_s, s = 1, 0
+    old_t, t = 0, 1
+
+    while r != 0:
+        q = old_r // r
+        old_r, r = r, old_r - q * r
+        old_s, s = s, old_s - q * s
+        old_t, t = t, old_t - q * t
+
+    return old_r, old_s, old_t
 
 
 def _mod_inverse(a: int, m: int) -> int:
@@ -59,19 +66,3 @@ def sign_vault(vault_path: str | Path, public_key, private_key) -> tuple:
 
     path.write_text(json.dumps(vault, indent=2), encoding="utf-8")
     return vault
-
-if __name__ == "__main__":
-    from modules.elgamal import ElGamalPublicKey, ElGamalPrivateKey
-    from modules.verify import verify_vault
-
-    # Create a sample vault file for testing
-    sample_vault = {"encrypted_vault": "a3f8b2c1d4e5_sample_encrypted_data", "signature": {}}
-    Path("test_vault.json").write_text(json.dumps(sample_vault, indent=2))
-
-    pub  = ElGamalPublicKey(p=23, alpha=5, y=17)
-    priv = ElGamalPrivateKey(x=7)
-
-    vault = sign_vault("test_vault.json", pub, priv)
-    # print("Vault file after signing:")
-    # print(json.dumps(vault, indent=2))
-    print("Verifies:", verify_vault("test_vault.json", pub))
