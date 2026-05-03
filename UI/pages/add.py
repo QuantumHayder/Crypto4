@@ -7,7 +7,7 @@ from modules.vault_encryption import VaultEncryption
 def render() -> None:
     site = st.text_input("Website / Service", placeholder="e.g. github.com")
     user = st.text_input("Username / Email",  placeholder="e.g. user@example.com")
-    pw   = st.text_input("Password", type="password", placeholder="••••••••••")
+    pw   = st.text_input("Password", type="password", placeholder="**********")
     show_strength(pw, "add")
 
     st.markdown("---")
@@ -18,7 +18,7 @@ def render() -> None:
     )
     confirm_pw = st.text_input(
         "Master Password", type="password",
-        key="add_confirm_pw", placeholder="••••••••••",
+        key="add_confirm_pw", placeholder="**********",
     )
 
     if st.button("Save to Vault →", type="primary", use_container_width=True):

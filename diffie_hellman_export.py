@@ -12,18 +12,14 @@ from modules.verify     import verify_message, verify_vault
 
 @dataclass(frozen=True)
 class DHPublicKey:
-    value: int  # a^priv mod p
-
+    value: int
 @dataclass(frozen=True)
 class DHPrivateKey:
     value: int
 
-
-# DH core
-
 def dh_generate_keypair():
     """
-    generate an ephemeral DH keypair from shared config params
+    generate an DH keypair from shared config params
     private key chosen from [2, q-1], public key = alpha^private mod p
     """
     q     = DH_PARAMS["q"]
@@ -36,7 +32,7 @@ def dh_generate_keypair():
     return DHPublicKey(value=public), DHPrivateKey(value=private)
 
 
-def dh_compute_shared_secret(their_public: DHPublicKey, my_private: DHPrivateKey) -> int:
+def dh_make_shared_secret(their_public: DHPublicKey, my_private: DHPrivateKey) -> int:
     """
     shared secret = their_public^my_private mod p
     both sides arrive at alpha^(ab) mod p independently
@@ -44,21 +40,14 @@ def dh_compute_shared_secret(their_public: DHPublicKey, my_private: DHPrivateKey
     p = DH_PARAMS["p"]
     return pow(their_public.value, my_private.value, p)
 
-
-def dh_derive_session_key(shared_secret: int) -> str:
+def dh_make_session_key(shared_secret: int) -> str:
     """derive a 256-bit AES session key from the DH shared secret via SHA-256"""
-    secret_bytes = shared_secret.to_bytes(
-        (shared_secret.bit_length() + 7) // 8,
-        byteorder="big"
-    )
+    secret_bytes = shared_secret.to_bytes((shared_secret.bit_length() + 7) // 8, byteorder="big")
     return hashlib.sha256(secret_bytes).hexdigest()
-
-
-# sign / verify DH public keys
 
 def sign_dh_public_key(dh_pub: DHPublicKey, public_key, private_key) -> dict:
     """
-    sign a DH public key with the sender's ElGamal private key (Module 1)
+    sign a DH public key with the sender's ElGamal private key
     so the receiver can verify it wasn't swapped by a MITM
     """
     r, s = sign_message(str(dh_pub.value), public_key, private_key)
@@ -67,7 +56,6 @@ def sign_dh_public_key(dh_pub: DHPublicKey, public_key, private_key) -> dict:
         "r": format(r, "x"),
         "s": format(s, "x"),
     }
-
 
 def verify_dh_public_key(signed_pkg: dict, public_key) -> DHPublicKey:
     """
@@ -83,10 +71,7 @@ def verify_dh_public_key(signed_pkg: dict, public_key) -> DHPublicKey:
 
     return DHPublicKey(value=dh_value)
 
-
-# sign / verify the export package
-
-def _sign_export_package(encrypted_data: str, public_key, private_key) -> dict:
+def sign_export_package(encrypted_data: str, public_key, private_key) -> dict:
     """sign the session-encrypted vault string with D1's ElGamal private key"""
     r, s = sign_message(encrypted_data, public_key, private_key)
     return {
@@ -95,8 +80,7 @@ def _sign_export_package(encrypted_data: str, public_key, private_key) -> dict:
         "s": format(s, "x"),
     }
 
-
-def _verify_export_package(pkg: dict, sender_public_key) -> str:
+def verify_export_package(pkg: dict, sender_public_key) -> str:
     """
     verify the ElGamal signature on the export package using D1's public key
     raises ValueError and aborts import if invalid
@@ -110,11 +94,7 @@ def _verify_export_package(pkg: dict, sender_public_key) -> str:
             "Import aborted: signature on export package is INVALID — "
             "vault data may have been tampered with in transit"
         )
-
     return encrypted_data
-
-
-# key exchange
 
 def device1_start_exchange(public_key, private_key) -> tuple:
     """
@@ -125,41 +105,32 @@ def device1_start_exchange(public_key, private_key) -> tuple:
     signed_pkg      = sign_dh_public_key(dh_pub, public_key, private_key)
     return dh_pub, dh_priv, signed_pkg
 
-
 def device2_respond_to_exchange(d1_signed_pkg, d1_public_key, d2_public_key, d2_private_key) -> tuple:
     """
     device 2 verifies D1's signed DH key, then generates its own and signs it
     aborts with ValueError if D1's signature is invalid
     returns (dh_pub, dh_priv, signed_pkg_to_send_back)
     """
-    # verify D1's signature — abort if invalid
     verify_dh_public_key(d1_signed_pkg, d1_public_key)
 
     dh_pub, dh_priv = dh_generate_keypair()
     signed_pkg      = sign_dh_public_key(dh_pub, d2_public_key, d2_private_key)
     return dh_pub, dh_priv, signed_pkg
 
-
-# transfer & import
-
-def export_vault(vault_path, master_password, d1_dh_priv, d2_signed_pkg,
-                 d1_public_key, d1_private_key, d2_public_key) -> dict:
+def export_vault(vault_path, master_password, d1_dh_priv, d2_signed_pkg, d1_public_key, d1_private_key, d2_public_key) -> dict:
     """
     build the signed export package on device 1
 
-    1. verify D2's signed DH public key
-    2. compute shared secret -> derive session AES key
-    3. verify vault integrity before exporting
-    4. decrypt vault with master password
-    5. re-encrypt with session key
-    6. sign the session-encrypted data with D1's ElGamal key
+    verify D2's signed DH public key
+    compute shared secret -> derive session AES key
+    verify vault integrity before exporting
+    decrypt vault with master password
+    re-encrypt with session key
+    sign the session-encrypted data with D1's ElGamal key
     """
-    # verify D2's signature on its DH public key, abort if invalid
     d2_dh_pub     = verify_dh_public_key(d2_signed_pkg, d2_public_key)
-    shared_secret = dh_compute_shared_secret(d2_dh_pub, d1_dh_priv)
-    session_key   = dh_derive_session_key(shared_secret)
-
-    # verify vault integrity before touching it
+    shared_secret = dh_make_shared_secret(d2_dh_pub, d1_dh_priv)
+    session_key   = dh_make_session_key(shared_secret)
     path = Path(vault_path)
     if not verify_vault(path, d1_public_key):
         raise ValueError("Vault signature invalid — refusing to export a tampered vault.")
@@ -167,33 +138,28 @@ def export_vault(vault_path, master_password, d1_dh_priv, d2_signed_pkg,
     vault_dict      = json.loads(path.read_text(encoding="utf-8"))
     plaintext_vault = AES_Encryption(master_password).decrypt(vault_dict["encrypted_vault"])
 
-    # re-encrypt with session key then sign
     session_encrypted = AES_Encryption(session_key).encrypt(plaintext_vault)
-    return _sign_export_package(session_encrypted, d1_public_key, d1_private_key)
+    return sign_export_package(session_encrypted, d1_public_key, d1_private_key)
 
 
-def import_vault(export_pkg, d2_dh_priv, d1_signed_dh_pkg, d1_public_key,
-                 d2_public_key, d2_private_key, new_master_password, output_vault_path) -> Path:
+def import_vault(export_pkg, d2_dh_priv, d1_signed_dh_pkg, d1_public_key, d2_public_key, d2_private_key, new_master_password, output_vault_path) -> Path:
     """
     import the exported vault on device 2
 
-    1. re-derive shared secret from D1's DH public key
-    2. derive the same session key
-    3. verify ElGamal signature on the export package
-    4. decrypt with session key
-    5. re-encrypt with device 2's new master password
-    6. save to disk and sign with D2's ElGamal private key
+    re-derive shared secret from D1's DH public key
+    derive the same session key
+    verify ElGamal signature on the export package
+    decrypt with session key
+    re-encrypt with device 2's new master password
+    save to disk and sign with D2's ElGamal private key
     """
-    # re-derive shared secret — D2 uses D1's DH public key with its own private key
     d1_dh_pub     = verify_dh_public_key(d1_signed_dh_pkg, d1_public_key)
-    shared_secret = dh_compute_shared_secret(d1_dh_pub, d2_dh_priv)
-    session_key   = dh_derive_session_key(shared_secret)
+    shared_secret = dh_make_shared_secret(d1_dh_pub, d2_dh_priv)
+    session_key   = dh_make_session_key(shared_secret)
 
-    # spec: verify D1's signature on the package, abort if invalid
-    session_encrypted = _verify_export_package(export_pkg, d1_public_key)
+    session_encrypted = verify_export_package(export_pkg, d1_public_key)
     plaintext_vault   = AES_Encryption(session_key).decrypt(session_encrypted)
 
-    # re-encrypt under D2's master password and save
     new_encrypted = AES_Encryption(new_master_password).encrypt(plaintext_vault)
     output_path   = Path(output_vault_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -202,14 +168,8 @@ def import_vault(export_pkg, d2_dh_priv, d1_signed_dh_pkg, d1_public_key,
         encoding="utf-8"
     )
 
-    # sign with D2's key
     sign_vault(output_path, d2_public_key, d2_private_key)
     return output_path
-
-
-# ------------------------------------------------------------------ #
-# High-level helpers used by the UI layer                              #
-# ------------------------------------------------------------------ #
 
 def build_export_bundle(sender: str, recipient: str, master_password: str) -> dict:
     """
@@ -222,8 +182,8 @@ def build_export_bundle(sender: str, recipient: str, master_password: str) -> di
     d1_pub_k, d1_priv_k = load_keypair(sender)
     d2_pub_k, d2_priv_k = load_keypair(recipient)
 
-    d1_dh_pub, d1_dh_priv, d1_signed_pkg = device1_start_exchange(d1_pub_k, d1_priv_k)
-    _d2_dh_pub, d2_dh_priv, d2_signed_pkg = device2_respond_to_exchange(
+    _, d1_dh_priv, d1_signed_pkg = device1_start_exchange(d1_pub_k, d1_priv_k)
+    _, d2_dh_priv, d2_signed_pkg = device2_respond_to_exchange(
         d1_signed_pkg, d1_pub_k, d2_pub_k, d2_priv_k
     )
 
