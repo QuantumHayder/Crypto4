@@ -25,7 +25,7 @@ html, body, [class*="css"] {
 }
 
 /* hide streamlit chrome */
-#MainMenu, footer, header { visibility: hidden; }
+footer { visibility: hidden; }
 [data-testid="stToolbar"] { display: none; }
 .block-container { padding-top: 2.5rem !important; max-width: 680px !important; }
 
