@@ -1,9 +1,6 @@
 import streamlit as st
 
-from modules.elgamal import load_keypair
-from modules.verify import verify_vault
-from UI.components import page_header
-from vault_service import vault_path, load_entries, save_entries, verify_master_password
+from vault_service import load_entries, save_entries, verify_master_password
 
 
 def render() -> None:
