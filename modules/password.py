@@ -1,3 +1,4 @@
+# old - tutorial
 from zxcvbn import zxcvbn
 from getpass import getpass
 import bcrypt
