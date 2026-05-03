@@ -12,16 +12,6 @@ def render() -> None:
         sub="Import a vault bundle that was exported to you.",
     )
 
-    st.markdown(
-        '<div class="dh-info">'
-        "The bundle's ElGamal signature is verified before decryption. "
-        "If verification fails the import is aborted. "
-        "The vault is then re-encrypted under your chosen master password "
-        "and re-signed with your key."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
     uploaded = st.file_uploader("Upload export_bundle.json", type="json")
     new_pw   = st.text_input(
         "New master password for this vault",
