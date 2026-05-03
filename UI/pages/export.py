@@ -26,7 +26,7 @@ def render() -> None:
                     )
                 st.success("Export package ready. Download and share it with the recipient.")
                 st.download_button(
-                    label="⬇ Download export_bundle.json",
+                    label="Download export_bundle.json",
                     data=json.dumps(bundle, indent=2),
                     file_name="export_bundle.json",
                     mime="application/json",

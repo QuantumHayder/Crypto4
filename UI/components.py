@@ -52,10 +52,10 @@ def render_sidebar() -> None:
         )
         st.divider()
         nav = [
-            ("🗄  My Vault",       "vault"),
-            ("＋  Add Credential", "add"),
-            ("↑   Export Vault",   "export"),
-            ("↓   Import Vault",   "import"),
+            ("My Vault",       "vault"),
+            ("Add Credential", "add"),
+            ("Export Vault",   "export"),
+            ("Import Vault",   "import"),
         ]
         for label, pg in nav:
             if st.button(label, use_container_width=True, key=f"nav_{pg}"):
@@ -70,4 +70,3 @@ def render_sidebar() -> None:
                     else ({} if k == "confirm_action" else "")
                 )
             st.session_state.page = "login"
-            # st.rerun()

@@ -18,7 +18,7 @@ import random
 from sympy import isprime, nextprime
  
  
-def generate_safe_prime(bits=64):
+def generate_safe_prime(bits=256):
     """
     generate a safe prime p = 2q + 1 where both p and q are prime
     bits controls the size of q
@@ -49,13 +49,13 @@ def find_generator(p, q):
             return alpha
  
  
-def _generate_params(bits=64):
+def _generate_params(bits=256):
     p, q = generate_safe_prime(bits)
     alpha = find_generator(p, q)
     return p, q, alpha
  
 
-_p, _q, _alpha = _generate_params(bits=64)
+_p, _q, _alpha = _generate_params(bits=256)
  
 ELGAMAL_PARAMS = {
     "p":     _p,

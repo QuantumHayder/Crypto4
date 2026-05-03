@@ -11,7 +11,7 @@ def render() -> None:
         st.stop()
 
     # Signature is already verified inside load_entries; if we're here it passed.
-    sig_html  = '<span class="sig-ok">✔ signature valid</span>'
+    sig_html  = '<span class="sig-ok">signature valid</span>'
     count     = len(entries)
     count_html = (
         f'<span class="count-badge">'
@@ -82,7 +82,7 @@ def _render_entry(i: int, e: dict, entries: list[dict]) -> None:
 def _confirm_password_input(key: str) -> str:
     """Render master password confirmation input and return its value."""
     return st.text_input(
-        "Master Password", type="password", key=key, placeholder="••••••••••"
+        "Master Password", type="password", key=key, placeholder="**********"
     )
 
 
@@ -155,7 +155,7 @@ def _confirm_edit_unlocked(i: int, e: dict, entries: list[dict]) -> None:
 
 def _confirm_delete(i: int, e: dict, entries: list[dict]) -> None:
     st.markdown(
-        f'<div class="confirm-box"><p>⚠ confirm deletion of "{e["website"]}"</p></div>',
+        f'<div class="confirm-box"><p>confirm deletion of "{e["website"]}"</p></div>',
         unsafe_allow_html=True,
     )
     confirm_pw = _confirm_password_input(f"del_pw_{i}")

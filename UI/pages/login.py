@@ -25,9 +25,9 @@ def render() -> None:
 
 def _render_login() -> None:
     uname = st.text_input("Username", key="li_u", placeholder="your username")
-    pw    = st.text_input("Master Password", type="password", key="li_p", placeholder="••••••••••")
+    pw    = st.text_input("Master Password", type="password", key="li_p", placeholder="**********")
 
-    if st.button("Sign In →", type="primary", use_container_width=True, key="li_btn"):
+    if st.button("Sign In", type="primary", use_container_width=True, key="li_btn"):
         if not uname or not pw:
             st.error("Both fields are required.")
         elif not user_exists(uname):
@@ -46,11 +46,11 @@ def _render_login() -> None:
 
 def _render_register() -> None:
     new_u  = st.text_input("Username", key="reg_u", placeholder="choose a username")
-    new_pw = st.text_input("Master Password", type="password", key="reg_p", placeholder="••••••••••")
+    new_pw = st.text_input("Master Password", type="password", key="reg_p", placeholder="**********")
     score  = show_strength(new_pw, "reg")
     st.caption("Master password must be Strong (score ≥ 3). It cannot be recovered if lost.")
 
-    if st.button("Create Account →", type="primary", use_container_width=True, key="reg_btn"):
+    if st.button("Create Account", type="primary", use_container_width=True, key="reg_btn"):
         if not new_u or not new_pw:
             st.error("Both fields are required.")
         elif user_exists(new_u):
