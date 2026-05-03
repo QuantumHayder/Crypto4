@@ -6,15 +6,6 @@ from vault_service import user_exists, build_export_bundle
 
 
 def render() -> None:
-    st.markdown(
-        '<div class="dh-info">'
-        "Key Exchange: ephemeral DH keypairs are generated, mutually signed with ElGamal, "
-        "and used to derive a one-time AES-256 session key. The vault is re-encrypted "
-        "under this session key before transmission."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
     recipient = st.text_input("Recipient username", placeholder="their username on this system")
 
     if st.button("Generate Export Package →", type="primary", use_container_width=True):
