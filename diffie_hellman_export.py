@@ -12,7 +12,7 @@ from modules.verify     import verify_message, verify_vault
 
 @dataclass(frozen=True)
 class DHPublicKey:
-    value: int  # alpha^private mod p
+    value: int  # a^priv mod p
 
 @dataclass(frozen=True)
 class DHPrivateKey:
@@ -129,7 +129,7 @@ def device1_start_exchange(public_key, private_key) -> tuple:
 def device2_respond_to_exchange(d1_signed_pkg, d1_public_key, d2_public_key, d2_private_key) -> tuple:
     """
     device 2 verifies D1's signed DH key, then generates its own and signs it
-    aborts with ValueError if D1's signature is invalid (spec step 4)
+    aborts with ValueError if D1's signature is invalid
     returns (dh_pub, dh_priv, signed_pkg_to_send_back)
     """
     # verify D1's signature — abort if invalid
